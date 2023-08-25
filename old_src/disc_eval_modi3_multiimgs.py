@@ -1,3 +1,4 @@
+# 필요한 라이브러리 및 모듈을 가져오기
 import torch
 import timm
 from timm.models.layers import PatchEmbed
@@ -11,47 +12,20 @@ from sscd.models.model import Model
 from sscd.lib.util import call_using_args, parse_bool
 import argparse
 from collections import OrderedDict
-
-import os
-from torch.utils.data import Dataset, DataLoader
-from torchvision.datasets import ImageFolder
-
-from sscd.models import mae_vit, dino_vit
+import os 
 
 # 이미지들을 텐서로 로드하는 함수. 입력: 이미지 디렉터리 경로, 출력: 텐서로 변환된 이미지들
-
-class CustomImageDataset(Dataset):
-    def __init__(self, root_dir, transform=None):
-        self.root_dir = root_dir
-        self.image_files = [f for f in os.listdir(root_dir) if os.path.isfile(os.path.join(root_dir, f)) and f.lower().endswith((".png", ".jpg", ".jpeg"))]
-        self.transform = transform
-
-    def __len__(self):
-        return len(self.image_files)
-
-    def __getitem__(self, idx):
-        image_path = os.path.join(self.root_dir, self.image_files[idx])
-        image = Image.open(image_path).convert('RGB')
-        if self.transform:
-            image = self.transform(image)
-        return image
-
-
-def load_images_as_tensors(args):
+# Load Image as Tensor
+def load_images_as_tensors(image_dir):
     transform = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
     
-    dataset = CustomImageDataset(args.disc_path, transform=transform)
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False, num_workers=0)
-    
-    images = []
-    for batch in dataloader:
-        images.append(batch)
+    image_files = [os.path.join(image_dir, f) for f in os.listdir(image_dir) if f.endswith(('.jpg', '.jpeg', '.png'))]
+    images = [transform(Image.open(f).convert('RGB')).unsqueeze(0) for f in image_files]
     return torch.cat(images, dim=0)
-
 
 # 거리 행렬을 계산하는 함수. 입력: 패치 크기, 패치 수, 길이, 출력: 거리 행렬
 # Compute Distance Matrix
@@ -67,7 +41,6 @@ def compute_distance_matrix(patch_size, num_patches, length):
 # 평균 주의 거리를 계산하는 함수. 입력: 패치 크기, 주의 가중치, 출력: 평균 거리
 # Compute MAD
 def compute_mean_attention_dist(patch_size, attention_weights):
-    # The attention_weights shape = (batch, num_heads, num_patches, num_patches)
     attention_weights = attention_weights[..., 1:, 1:]
     num_patches = attention_weights.shape[-1]
     length = int(np.sqrt(num_patches))
@@ -139,17 +112,14 @@ def compute_mean_attention_dist_for_images(images, model):
 # 메인 함수. 입력: 인수, 출력: 그래프 및 결과 파일
 # Main
 def main(args):
-    images = load_images_as_tensors(args) #[20]
+    images = load_images_as_tensors(args.disc_path)
 
-    model = timm.create_model(args.backbone, pretrained=False, num_classes=0)
-    state = torch.load(args.model_state, map_location=torch.device('cpu'))
-    new_state_dict = OrderedDict((k.replace("model.backbone.", ""), v) for k, v in state['state_dict'].items())
-    model.load_state_dict(new_state_dict, strict=True)
+    model = timm.create_model("vit_base_patch16_224.orig_in21k_ft_in1k", pretrained=True)
     model.eval()
 
     avg_mads = compute_mean_attention_dist_for_images(images, model)
 
-    save_path = f"./result_{args.backbone}_{args.disc_path.split('/')[-2]}_gpt.png"
+    save_path = f"./result_vit_base_whole2.png"
     visualize_mads(args, avg_mads, save_path)
 
 # 스크립트 실행시 메인 함수 호출
@@ -158,7 +128,6 @@ if __name__ == '__main__':
     parser.add_argument("--disc_path", required=True, type=str, help="Path to the directory containing images.")
     parser.add_argument("--backbone", default="vit_base_patch16_224.dino", type=str)
     parser.add_argument("--dims", default=768, type=int)
-    parser.add_argument("--batch_size", default=16, type=int)
     parser.add_argument("--model_state")  # checkpoint
     parser.add_argument("--output_path", required=True)
     parser.add_argument("--gpus", default=1, type=int)
