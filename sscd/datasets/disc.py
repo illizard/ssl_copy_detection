@@ -41,7 +41,7 @@ class DISCEvalDataset:
         query_path = get_path(query_path, "queries/images/queries")
         ref_path = get_path(ref_path, "references/images/references")
         train_path = get_path(train_path, "train/images/train") if include_train else None
-        gt_path = get_path(gt_path, "list_files/mini_ground_truth.csv")
+        gt_path = get_path(gt_path, "list_files/dev_ground_truth.csv")
         self.files, self.metadata = self.read_files(ref_path, self.SPLIT_REF)
         query_files, query_metadata = self.read_files(query_path, self.SPLIT_QUERY)
         self.files.extend(query_files)

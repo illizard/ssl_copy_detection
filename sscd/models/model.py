@@ -18,6 +18,7 @@ from .gem_pooling import GlobalGeMPool2d
 
 from sscd.models import mae_vit
 from sscd.models import dino_vit
+from sscd.models import dtop_vit
 
 import timm
 
@@ -27,6 +28,7 @@ class Implementation(enum.Enum):
     TORCHVISION_ISC = enum.auto()
     OFFICIAL = enum.auto() ##230708##
     MOBILE = enum.auto() ##230708##
+    MY = enum.auto() ##230925##
     
 class Backbone(enum.Enum):
     CV_RESNET18 = ("resnet18", 512, Implementation.CLASSY_VISION)
@@ -38,10 +40,14 @@ class Backbone(enum.Enum):
     TV_RESNEXT101 = (resnext101_32x8d, 2048, Implementation.TORCHVISION)
     
     MULTI_RESNET50 = ("multigrain_resnet50", 2048, Implementation.TORCHVISION_ISC)
-    
+
+    OFFL_VIT = ('vit_patch_16_base', 768, Implementation.OFFICIAL)     ##230831#    
+    OFFL_VIT_TINY = ('vit_patch_16_tiny', 192, Implementation.OFFICIAL)     ##230831#    
     OFFL_DINO = ('dino_patch_16_base', 768, Implementation.OFFICIAL)     ##230708##
     OFFL_MAE = ('mae_patch_16_base', 768, Implementation.OFFICIAL)  
-    OFFL_MOBVIT = ('mobilevit_xxs', 192, Implementation.MOBILE)  
+    OFFL_MOBVIT = ('mobilevit_xxs', 192, Implementation.MOBILE)
+    MY_DTOP_VIT = ('dtop_vit_tiny', 192, Implementation.MY)  
+  
     # dino = ('dino_patch_16_base', 768, Implementation.OFFICIAL)     ##230708##
     
     def build(self, dims: int):
@@ -70,7 +76,13 @@ class Backbone(enum.Enum):
             return model
 
         if impl == Implementation.OFFICIAL: #### modi 0722 ###
-            if self.value[0] == "dino_patch_16_base":
+            if self.value[0] == "vit_patch_16_base":
+                model = timm.create_model("vit_base_patch16_224.augreg_in1k", pretrained=False, num_classes=0)
+                return model            
+            elif self.value[0] == "vit_patch_16_tiny":
+                model = timm.create_model("vit_tiny_patch16_224.augreg_in21k", pretrained=True, num_classes=0)
+                return model            
+            elif self.value[0] == "dino_patch_16_base":
                 model = dino_vit.__dict__['vit_base'](patch_size=16, num_classes=0)
                 ckpt = torch.load("/hdd/wi/isc2021/models/dino_vitbase16_pretrain.pth", map_location=torch.device('cpu'))
                 # new_ckpt = OrderedDict(("backbone."+k, v) for k, v in ckpt.items())
@@ -96,6 +108,13 @@ class Backbone(enum.Enum):
 
         if impl == Implementation.MOBILE:
             model = timm.create_model("mobilevit_xxs", num_classes=0, pretrained=True)
+            return model
+
+        if impl == Implementation.MY:
+            if self.value[0] == "dtop_vit_tiny":
+                model = dtop_vit.DeepTokenPooling().cuda()
+                # MY_DTOP_VIT = ('dtop_vit_tiny', 192, Implementation.MY)  
+
             return model
                 
         else:
@@ -145,18 +164,27 @@ class Model(nn.Module):
         # ValueError: not enough values to unpack (expected 4, got 2) 왜 이런 에러가 나는지 도대체 모르겟네
         ## MODIFIED 230724##
         elif impl == Implementation.OFFICIAL:
-            if self.backbone_type.value[0] == "dino_patch_16_base":
+            if self.backbone_type.value[0] == "vit_patch_16_base":
+                self.embeddings = L2Norm() 
+            elif self.backbone_type.value[0] == "vit_patch_16_tiny":
                 self.embeddings = L2Norm()    
-            if self.backbone_type.value[0] == "mae_patch_16_base":
+            elif self.backbone_type.value[0] == "dino_patch_16_base":
+                self.embeddings = L2Norm()    
+            elif self.backbone_type.value[0] == "mae_patch_16_base":
                 self.backbone.head_drop = nn.Identity()
                 self.embeddings = L2Norm()
             # cls token // patch embbdig 정하기            
 
         elif impl == Implementation.MOBILE:
             self.embeddings = L2Norm()
-
+        
+        elif impl == Implementation.MY:
+            self.embeddings = L2Norm()
+            
     def forward(self, x):
         x = self.backbone(x)
+        # print(f"x.shape is {x.shape}")
+
         # return x
         return self.embeddings(x)
         

@@ -207,12 +207,24 @@ class VisionTransformer(nn.Module):
 
         return self.pos_drop(x)
 
-    def forward(self, x):
+    # # original code
+    # def forward(self, x):
+    #     x = self.prepare_tokens(x)
+    #     for blk in self.blocks:
+    #         x = blk(x)
+    #     x = self.norm(x)
+    #     return x[:, 0]
+
+    def forward(self, x, target_layer_idx=9):
+        
         x = self.prepare_tokens(x)
-        for blk in self.blocks:
+        for blk_idx, blk in enumerate(self.blocks):
             x = blk(x)
+            if blk_idx == target_layer_idx:
+                return self.norm(x)[:,0]
+            
         x = self.norm(x)
-        return x[:, 0]
+        return x[:, 0] 
 
     def get_last_selfattention(self, x):
         x = self.prepare_tokens(x)

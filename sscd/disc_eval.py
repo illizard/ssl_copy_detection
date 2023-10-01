@@ -174,6 +174,7 @@ def project(
     if codec_str != "Flat":
         assert codec_str.endswith(",Flat")
         codec = faiss.index_factory(training.dims, codec_str)
+        print(training.embeddings)
         codec.train(training.embeddings)
         queries = queries.project(codec, codec_str)
         refs = refs.project(codec, codec_str)
@@ -242,8 +243,8 @@ def main(args):
     dataset = DISCData.make_validation_dataset(
         args.disc_path,
         size=args.size,
-        include_train = False,
-        # include_train=True,
+        # include_train = False, # true면 score norm 에러남
+        include_train=True,
         preserve_aspect_ratio=args.preserve_aspect_ratio,
     )
     outputs = Inference.inference(args, dataset)

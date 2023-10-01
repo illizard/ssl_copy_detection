@@ -13,7 +13,7 @@ import pytorch_lightning as pl
 import torch
 
 # Set up our python environment (eg. PYTHONPATH).
-from .lib import initialize  # noqa
+from lib import initialize  # noqa
 
 from classy_vision.dataset.transforms import build_transforms
 from pytorch_lightning.callbacks import LearningRateMonitor
@@ -59,7 +59,8 @@ def add_train_args(parser: ArgumentParser, required=True):
     parser.add_argument("--nodes", default=1, type=int)
     parser.add_argument(
         "--batch_size",
-        default=4096,
+        # default=4096,
+        default=256,
         type=int,
         help="The global batch size (across all nodes/GPUs, before repeated augmentation)",
     )
@@ -126,7 +127,7 @@ class DISCData(pl.LightningDataModule):
         augmentations: AugmentationSetting,
         train_image_size=224,
         val_image_size=224,
-        val_batch_size=256,
+        val_batch_size=128,
         workers=10,
     ):
         super().__init__()
@@ -424,13 +425,14 @@ class SSCD(pl.LightningModule):
         if not self.logger:
             return
         path = os.path.join(self.logger.log_dir, "model_torchscript.pt")
-        self.save_torchscript(path)
+        # self.save_torchscript(path)
 
     def save_torchscript(self, filename):
         self.eval()
         #input = torch.randn((1, 3, 64, 64), device=self.device)
-        input = torch.randn((1, 3, 224, 224), device=self.device)
-        script = torch.jit.trace(self.model, input)
+        input = torch.randn((4, 3, 224, 224), device=self.device)
+        # script = torch.jit.trace(self.model, input)
+        script = torch.jit.script(self.model)
         torch.jit.save(script, filename)
 
     def _gather(self, batch):
@@ -486,7 +488,8 @@ def main(args):
         max_epochs=args.epochs,
         sync_batchnorm=args.sync_bn,
         default_root_dir=args.output_path,
-        strategy=DDPSpawnPlugin(find_unused_parameters=False),
+        # strategy=DDPSpawnPlugin(find_unused_parameters=False),
+        strategy=DDPSpawnPlugin(find_unused_parameters=True),
         check_val_every_n_epoch=1,
         log_every_n_steps=1,
         num_sanity_val_steps=args.num_sanity_val_steps,
